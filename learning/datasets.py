@@ -21,10 +21,24 @@ class NPCDataset(Dataset):
     def __getitem__(self, index):
         img_path = os.path.join(self.img_dir, self.annotations.iloc[index, 0])
         image = read_image(img_path)
+        
+        # --- convert jpg to usable tensor --- 
         # image = cv2.imread(img_path)
         # image = np.moveaxis(image,-1,0)
         # image = torch.tensor(image)
+
+        # grabs image label
         label = torch.tensor(int(self.annotations.iloc[index, 1]))
+        
+        # grab BBox dimensions
+        try:
+            x1 = torch.tensor(int(self.annotations.iloc[index, 2]))
+            y1 = torch.tensor(int(self.annotations.iloc[index, 3]))
+            x2 = torch.tensor(int(self.annotations.iloc[index, 4]))
+            y2 = torch.tensor(int(self.annotations.iloc[index, 4]))
+            bbox = (x1,y1,x2,y2)
+        except:
+            bbox = None
 
         #if self.transform:
         #    image = self.transform(image)
@@ -32,4 +46,4 @@ class NPCDataset(Dataset):
         # if self.target_transform:
         #     label = self.target_transform(label)
         
-        return image, label
+        return image, label, bbox

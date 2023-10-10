@@ -1,19 +1,14 @@
 import os
 import random
 import time
+from traceback import format_exc
 import cv2
 import numpy as np
 import torch
-import win32gui,win32con,win32api
 from grabscreen import screen_grabber
 from game_interactions import game_functions as gf
 from player import Player
 import keyboard
-from learning.brain_model import ResNet, ResidualBlock
-from PIL import Image
-from torchvision import transforms
-from torchvision import io
-from torchvision.utils import draw_bounding_boxes, draw_segmentation_masks
 
 # used to locate target window with name that contains this string
 TARGET_WINDOW = 'Fallout'
@@ -24,6 +19,7 @@ def dissect_frame(full_frame):
 
     health, compass, npcs/environment (should use full frame actually or censored frame), AP, weapon condition, ammo (if applicable)
     """
+    # needs try except as the capture can fail on rare occasion
     try:
         health_frame = full_frame[960:968,68:400]
         compasss_frame = full_frame[990:1060,70:400]
@@ -45,11 +41,6 @@ def on_pause(player:Player):
 
 if __name__ == '__main__':
     # ---- MODEL ----
-    num_classes = 2
-    num_epochs = 10
-    batch_size = 16
-    learning_rate = 1e-3
-    loader = transforms.Compose( transforms.ToTensor())
     device = (
         "cuda"
         if torch.cuda.is_available()
@@ -57,10 +48,15 @@ if __name__ == '__main__':
         if torch.backends.mps.is_available()
         else "cpu"
     )
-    model = torch.load(f'{os.getcwd()}/npc_detection_model')
+    # try to load AI model
+    try:
+        model = torch.load(f'{os.getcwd()}/npc_detection_model')
+    except Exception as e:
+        print(f'Failed to load in AI model... ERROR: {e}, {format_exc()}')
+        exit()
+
     model.to(device=device)
     model.eval()
-    # print(f'device: {device}')
     
 
     # ---- CLASSES ----
@@ -68,7 +64,7 @@ if __name__ == '__main__':
     player = Player()
     
     # ---- DEBUG ----
-    #hp values
+    # stat values
     test_hp = 37
     test_ap = 37
     timer1 = time.time()
@@ -122,12 +118,11 @@ if __name__ == '__main__':
             
             # process frame
             pred = model(image)
-            #print(pred.data)
-            # assess values of predictions 
-            # pred_index = torch.argmax(pred)
-            # pred_value = pred[0][pred_index]
+
+            # assess values of predictions
             pred_results = pred[0].tolist()
             see = []
+            # use weights to declare what classes are actually currently visible on the screen
             if pred_results[0] >= 8:
                 see.append(f'brahmin ({pred_results[0]:.4f})')
             if pred_results[1] >= 14:
@@ -142,6 +137,7 @@ if __name__ == '__main__':
                 see.append(f'mirelurk ({pred_results[5]:.4f})')
             if pred_results[6] >= 4:
                 see.append(f'super mutant ({pred_results[6]:.4f})')
+            # for current debugging stages just print out what is currently visible
             if see != []:
                 print('I think I see: {}'.format(', '.join(see)))
         except:

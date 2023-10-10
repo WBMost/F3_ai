@@ -6,11 +6,14 @@ class Player:
     def __init__(self, confidence = True) -> None:
         self.hp = 37
         self.ap = 37
+        # declares if the bot will act or not and 
         self.paused = True
+        # if enemies are present on screen and where
         self.enemies = False
+        # declares if bot in direction of current objective
         self.direction = False
+        # for now is boolean but will be float value in future to declare how "brave" the bot will be for combat purposes
         self.confident = confidence
-        self.look_value = 0
     
     # detect health to know when to heal
     def health_detection(self,h_frame):
@@ -37,6 +40,7 @@ class Player:
         self.ap = current_ap
 
     # detect which direction to point, look there and start walking
+    # TODO: further optimize
     def compass_detection(self,c_frame):
         # itterate through compass
         for i in list(range(329)):
@@ -60,26 +64,3 @@ class Player:
             gf().look_x(self.look_value)
             gf().stop()
         pass
-
-    def detect_y_axis(self,frame):
-        ground_color_lower = np.array([60, 60, 60])  # Lower threshold for ground color (in BGR)
-        ground_color_upper = np.array([100, 100, 100])
-
-        gray_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        
-        # Threshold the frame to find the ground
-        _, thresholded = cv2.threshold(gray_frame, 200, 255, cv2.THRESH_BINARY)
-        
-        # Find contours in the thresholded frame
-        contours, _ = cv2.findContours(thresholded, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-        
-        # Find the contour with the largest area (assuming it's the ground)
-        max_contour = max(contours, key=cv2.contourArea)
-        
-        # Get the Y-coordinate of the centroid of the largest contour
-        M = cv2.moments(max_contour)
-        if M["m00"] != 0:
-            ground_y = int(M["m01"] / M["m00"])
-            return ground_y
-        else:
-            return None

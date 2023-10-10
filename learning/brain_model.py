@@ -2,7 +2,6 @@ import torch.nn as nn
 import torchvision.models as models
 import torch
 import datetime
-import torch.nn.functional as F
 
 def info(message):
     print(f'{datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")} - Info - {message}')
@@ -31,9 +30,9 @@ class ResidualBlock(nn.Module):
         out = self.relu(out)
         return out
 
-class ResNetScratch(nn.Module):
+class ResNet(nn.Module):
     def __init__(self, block, layers, num_classes = 10):
-        super(ResNetScratch, self).__init__()
+        super(ResNet, self).__init__()
         self.inplanes = 64
         self.conv1 = nn.Sequential(
                         nn.Conv2d(3, 64, kernel_size = 7, stride = 2, padding = 3),
@@ -50,7 +49,6 @@ class ResNetScratch(nn.Module):
     def _make_layer(self, block, planes, blocks, stride=1):
         downsample = None
         if stride != 1 or self.inplanes != planes:
-            
             downsample = nn.Sequential(
                 nn.Conv2d(self.inplanes, planes, kernel_size=1, stride=stride),
                 nn.BatchNorm2d(planes),
@@ -62,7 +60,6 @@ class ResNetScratch(nn.Module):
             layers.append(block(self.inplanes, planes))
 
         return nn.Sequential(*layers)
-    
     
     def forward(self, x):
         x = x.float()
@@ -78,74 +75,6 @@ class ResNetScratch(nn.Module):
         x = self.fc(x)
 
         return x
-
-class ResNet(nn.Module):
-    def __init__(self):
-        super(ResNet, self).__init__()
-        resnet = models.resnet50(weights='DEFAULT')
-        layers = list(resnet.children())[:8]
-        self.features1 = nn.Sequential(*layers[:6])
-        self.features2 = nn.Sequential(*layers[6:])
-        self.classifier = nn.Sequential(nn.BatchNorm1d(2048), nn.Linear(2048, 4))
-        self.relu = nn.ReLU()
-        self.bb = nn.Sequential(nn.BatchNorm1d(2048), nn.Linear(2048, 4))
-        
-    def forward(self, x):
-        x = x.float()
-        x = self.features1(x)
-        x = self.features2(x)
-        x = self.relu(x)
-        x = nn.AdaptiveAvgPool2d((1,1))(x)
-        x = x.view(x.shape[0], -1)
-        return self.classifier(x), self.bb(x)
-    
-def train_epocs(model, optimizer, train_dl, val_dl, epochs=10,C=1000):
-    idx = 0
-    for i in range(epochs):
-        model.train()
-        total = 0
-        sum_loss = 0
-        for x, y_class, y_bb in train_dl:
-            batch = y_class.shape[0]
-            x = x.cuda().float()
-            y_class = y_class.cuda()
-            y_bb = y_bb.cuda().float()
-            out_class, out_bb = model(x)
-            loss_class = F.cross_entropy(out_class, y_class, reduction="sum")
-            loss_bb = F.l1_loss(out_bb, y_bb, reduction="none").sum(1)
-            loss_bb = loss_bb.sum()
-            loss = loss_class + loss_bb/C
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
-            idx += 1
-            total += batch
-            sum_loss += loss.item()
-        train_loss = sum_loss/total
-        val_loss, val_acc = val_metrics(model, val_dl, C)
-        print("train_loss %.3f val_loss %.3f val_acc %.3f" % (train_loss, val_loss, val_acc))
-    return sum_loss/total
-
-def val_metrics(model, valid_dl, C=1000):
-    model.eval()
-    total = 0
-    sum_loss = 0
-    correct = 0 
-    for x, y_class, y_bb in valid_dl:
-        batch = y_class.shape[0]
-        x = x.cuda().float()
-        y_class = y_class.cuda()
-        y_bb = y_bb.cuda().float()
-        out_class, out_bb = model(x)
-        loss_class = F.cross_entropy(out_class, y_class, reduction="sum")
-        loss_bb = F.l1_loss(out_bb, y_bb, reduction="none").sum(1)
-        loss_bb = loss_bb.sum()
-        loss = loss_class + loss_bb/C
-        _, pred = torch.max(out_class, 1)
-        correct += pred.eq(y_class).sum().item()
-        sum_loss += loss.item()
-        total += batch
-    return sum_loss/total, correct/total
 
 if __name__ == '__main__':
     import torchvision.transforms as transforms
@@ -181,14 +110,10 @@ if __name__ == '__main__':
     try:
         model = ResNet()
         model.to(device)
-#        model = torch.load(f'{os.getcwd()}/npc_detection_model')# ResNet(ResidualBlock, [3, 4, 6, 3],num_classes)
-        # model.load_state_dict(torch.load())
-#        model.to(device=device)
-        # model = ResNet(ResidualBlock, [3, 4, 6, 3],num_classes)
-        # model.load_state_dict(torch.load(f'{os.getcwd()}/ghoul_model'))
-        # model.to(device)
+        model = torch.load(f'{os.getcwd()}/npc_detection_model')
+        model.to(device=device)
     except:
-        model = ResNet()
+        model = ResNet(ResidualBlock, [3, 4, 6, 3],num_classes)
         model.to(device)
 
 
@@ -198,9 +123,7 @@ if __name__ == '__main__':
 
     # Train the model
     total_step = len(train_loader)
-    parameters = filter(lambda p: p.requires_grad, model.parameters())
-    optimizer = torch.optim.Adam(parameters , lr =0.006)
-    train_epocs(model, optimizer, train_loader, valid_loader, epochs=15)
+
     for epoch in range(num_epochs):
         for i, (images, labels) in enumerate(train_loader):  
             # Move tensors to the configured device
